@@ -1,0 +1,101 @@
+#!/bin/bash
+
+if [ "$EUID" -eq 0 ]; then
+    echo "error: do not run as root"
+    exit 1
+fi
+
+check_dependencies() {
+    local missing_deps=()
+    for dep in "$@"; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            missing_deps+=("$dep")
+        fi
+    done
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        echo "missing dependencies: ${missing_deps[*]}"
+        read -p "attempt to install? (y/N): " install_choice
+        if [[ "$install_choice" =~ ^[yY] ]]; then
+            if command -v apt >/dev/null; then
+                sudo apt update && sudo apt install -y "${missing_deps[@]}"
+            elif command -v pacman >/dev/null; then
+                sudo pacman -S --noconfirm "${missing_deps[@]}"
+            elif command -v dnf >/dev/null; then
+                sudo dnf install -y "${missing_deps[@]}"
+            else
+                echo "error: package manager not recognized. install manually."
+                exit 1
+            fi
+        else
+            echo "error: dependencies required to proceed"
+            exit 1
+        fi
+    fi
+}
+
+check_dependencies "yt-dlp" "fzf" "mpv" "awk" "ffmpeg"
+
+echo "verification required"
+echo "press enter at any time to quit"
+
+for i in {3..1}; do
+    printf "\rremaining: %2d seconds... " "$i"
+    if read -t 1 -n 1; then
+        echo -e "\nexit"
+        exit 0
+    fi
+done
+
+echo -e "\ncomplete"
+read -p "continue? (y/N): " final_choice
+case "$final_choice" in
+    [yY][eE][sS]|[yY]) echo "proceeding" ;;
+    *) echo "exit"; exit 0 ;;
+esac
+
+die() {
+    printf "%s\n" "$*" >&2
+    exit 1
+}
+
+launcher() {
+    fzf --prompt="$1" --border=rounded --layout=reverse --height="$2"
+}
+
+query="$1"
+
+if [[ "$query" == "-h" || "$query" == "--help" ]]; then
+    echo "usage: unrot-yt [query]"
+    exit 0
+fi
+
+if [ -z "$query" ]; then
+    read -p "search: " query
+    [ -z "$query" ] && die "error: query empty"
+fi
+
+echo "searching: $query"
+
+selected=$(yt-dlp "ytsearch50:$query" --flat-playlist --print "%(title)s :: %(uploader)s :: %(id)s" 2>/dev/null | launcher "select: " "80%" --delimiter=" :: " --with-nth=1,2)
+
+[ -z "$selected" ] && { echo "exit"; exit 0; }
+
+video_id=$(echo "$selected" | awk -F ' :: ' '{print $NF}')
+
+echo "quality:"
+quality=$(printf "1. 240p\n2. 360p\n3. 480p" | launcher "quality: " "10")
+
+[ -z "$quality" ] && { echo "exit"; exit 0; }
+
+case "$quality" in
+    *480p*)  format="bestvideo[height<=480]+bestaudio/best"  ;;
+    *360p*)  format="bestvideo[height<=360]+bestaudio/best"  ;;
+    *)       format="bestvideo[height<=240]+bestaudio/best"  ;;
+esac
+
+echo "streaming"
+
+mpv --ytdl-format="$format" --hwdec=auto-safe "https://www.youtube.com/watch?v=$video_id" >/dev/null 2>&1
+
+echo "finished"
