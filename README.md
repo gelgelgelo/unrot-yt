@@ -5,12 +5,10 @@ command line interface, it prevents scrolling through youtube recommended page.
 
 ## Features  
 
-<br>
-<video src="assets/demo.mp4" width="720px" controls autoplay muted loop playsinline>
-  Your browser does not support the video tag.
-</video>
-<br>
-<br>
+<h1 align="left">
+  <img src="assets/demo.gif" alt="unrot-yt" width="720px"></a>
+  <br>
+</h1>
 
 - blocks you for 5 minutes before watching.  
 - only goes up to 480 (less stimulation)  
